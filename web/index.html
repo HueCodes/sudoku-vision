@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sudoku Vision - Solver Test</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #00d4ff; margin-bottom: 5px; }
+        .subtitle { color: #888; margin-bottom: 20px; }
+        button {
+            background: #00d4ff;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover { background: #00a8cc; }
+        button:disabled { background: #444; color: #888; cursor: not-allowed; }
+        #output {
+            white-space: pre;
+            background: #16213e;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.4;
+            overflow-x: auto;
+            border: 1px solid #0f3460;
+        }
+        .status {
+            padding: 8px 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .status.loading { background: #0f3460; color: #00d4ff; }
+        .status.ready { background: #064635; color: #38e54d; }
+        .status.error { background: #4a0000; color: #ff6b6b; }
+    </style>
+</head>
+<body>
+    <h1>Sudoku Vision</h1>
+    <p class="subtitle">WASM Solver Test</p>
+
+    <div id="status" class="status loading">Loading WASM module...</div>
+
+    <button id="solveBtn" onclick="testSolver()" disabled>Solve Example Puzzle</button>
+    <button id="clearBtn" onclick="clearOutput()" disabled>Clear</button>
+
+    <pre id="output"></pre>
+
+    <script src="sudoku.js"></script>
+    <script>
+        let solver = null;
+        const output = document.getElementById('output');
+        const status = document.getElementById('status');
+        const solveBtn = document.getElementById('solveBtn');
+        const clearBtn = document.getElementById('clearBtn');
+
+        function log(msg) {
+            output.textContent += msg + '\n';
+        }
+
+        function clearOutput() {
+            output.textContent = '';
+        }
+
+        function setStatus(text, type) {
+            status.textContent = text;
+            status.className = 'status ' + type;
+        }
+
+        // Initialize the WASM module
+        SudokuSolver().then(module => {
+            solver = {
+                setCell: module.cwrap('set_cell', null, ['number', 'number', 'number']),
+                getCell: module.cwrap('get_cell', 'number', ['number', 'number']),
+                clearGrid: module.cwrap('clear_grid', null, []),
+                solve: module.cwrap('solve', 'number', []),
+                isValid: module.cwrap('is_valid', 'number', [])
+            };
+            setStatus('WASM module loaded - ready to solve', 'ready');
+            solveBtn.disabled = false;
+            clearBtn.disabled = false;
+        }).catch(err => {
+            setStatus('Failed to load WASM: ' + err.message, 'error');
+            console.error(err);
+        });
+
+        function printGrid(label) {
+            log(label);
+            let s = '+-------+-------+-------+\n';
+            for (let row = 0; row < 9; row++) {
+                if (row > 0 && row % 3 === 0) {
+                    s += '+-------+-------+-------+\n';
+                }
+                s += '|';
+                for (let col = 0; col < 9; col++) {
+                    if (col > 0 && col % 3 === 0) s += '|';
+                    let val = solver.getCell(row, col);
+                    s += ' ' + (val === 0 ? '.' : val);
+                }
+                s += ' |\n';
+            }
+            s += '+-------+-------+-------+';
+            log(s);
+        }
+
+        function testSolver() {
+            if (!solver) {
+                log('Module not loaded yet');
+                return;
+            }
+
+            clearOutput();
+
+            // Example puzzle (0 = empty)
+            const puzzle = [
+                [5,3,0, 0,7,0, 0,0,0],
+                [6,0,0, 1,9,5, 0,0,0],
+                [0,9,8, 0,0,0, 0,6,0],
+
+                [8,0,0, 0,6,0, 0,0,3],
+                [4,0,0, 8,0,3, 0,0,1],
+                [7,0,0, 0,2,0, 0,0,6],
+
+                [0,6,0, 0,0,0, 2,8,0],
+                [0,0,0, 4,1,9, 0,0,5],
+                [0,0,0, 0,8,0, 0,7,9]
+            ];
+
+            // Load puzzle into WASM memory
+            solver.clearGrid();
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    solver.setCell(row, col, puzzle[row][col]);
+                }
+            }
+
+            printGrid('Input puzzle:');
+            log('');
+
+            // Validate
+            if (!solver.isValid()) {
+                log('ERROR: Invalid puzzle (duplicate numbers detected)');
+                return;
+            }
+
+            // Solve and measure time
+            const start = performance.now();
+            const solved = solver.solve();
+            const elapsed = (performance.now() - start).toFixed(3);
+
+            if (solved) {
+                log(`Solved in ${elapsed}ms`);
+                log('');
+                printGrid('Solution:');
+            } else {
+                log('No solution exists for this puzzle');
+            }
+        }
+    </script>
+</body>
+</html>

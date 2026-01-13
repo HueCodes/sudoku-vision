@@ -1,0 +1,28 @@
+CC = emcc
+SRC = src/sudoku.c src/wasm_api.c
+OUT = ../web/sudoku.js
+
+# Exported functions (the underscore prefix is required)
+EXPORTS = _set_cell,_get_cell,_clear_grid,_solve,_is_valid
+
+# Emscripten flags
+EMFLAGS = -O3 \
+          -s WASM=1 \
+          -s EXPORTED_FUNCTIONS="[$(EXPORTS)]" \
+          -s EXPORTED_RUNTIME_METHODS="[ccall,cwrap]" \
+          -s MODULARIZE=1 \
+          -s EXPORT_NAME="SudokuSolver" \
+          -s ALLOW_MEMORY_GROWTH=0 \
+          -s INITIAL_MEMORY=131072
+
+.PHONY: all clean
+
+all: $(OUT)
+
+$(OUT): $(SRC)
+	@mkdir -p ../web
+	$(CC) $(EMFLAGS) -I include $(SRC) -o $(OUT)
+	@echo "Built: $(OUT) and ../web/sudoku.wasm"
+
+clean:
+	rm -f ../web/sudoku.js ../web/sudoku.wasm
