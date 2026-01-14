@@ -1,0 +1,51 @@
+name: SudokuVision
+options:
+  bundleIdPrefix: com.sudokuvision
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    TARGETED_DEVICE_FAMILY: "1"
+    INFOPLIST_FILE: SudokuVision/Resources/Info.plist
+
+targets:
+  SudokuVision:
+    type: application
+    platform: iOS
+    sources:
+      - path: SudokuVision
+        excludes:
+          - "**/*.md"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sudokuvision.app
+        SWIFT_OBJC_BRIDGING_HEADER: SudokuVision/Utilities/BridgingHeader.h
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/SudokuVision/Features/Solver
+    info:
+      path: SudokuVision/Resources/Info.plist
+      properties:
+        NSCameraUsageDescription: "Sudoku Vision needs camera access to scan and solve sudoku puzzles."
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+
+schemes:
+  SudokuVision:
+    build:
+      targets:
+        SudokuVision: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
