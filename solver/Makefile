@@ -14,8 +14,8 @@ OBJDIR = obj
 # Target executable
 TARGET = sudoku_solver
 
-# Source files
-SOURCES = $(wildcard $(SRCDIR)/*.c)
+# Source files (exclude wasm_api.c for native build)
+SOURCES = $(filter-out $(SRCDIR)/wasm_api.c, $(wildcard $(SRCDIR)/*.c))
 OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
 
 # Default target

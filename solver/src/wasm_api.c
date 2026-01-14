@@ -31,26 +31,19 @@ void clear_grid(void) {
     }
 }
 
-// Export: Solve the puzzle, returns 1 if solved, 0 if unsolvable
+// Export: Solve the puzzle
+// Returns:
+//   SOLVE_SUCCESS (1)    - Solved successfully
+//   SOLVE_NOSOLUTION (0) - Valid input but no solution
+//   SOLVE_INVALID (-1)   - Invalid input (duplicates/out-of-range)
 EMSCRIPTEN_KEEPALIVE
 int solve(void) {
     return solve_sudoku(grid);
 }
 
-// Export: Validate current grid state (no conflicts)
+// Export: Validate current grid state (no conflicts, values in range)
+// Returns 1 if valid, 0 if invalid
 EMSCRIPTEN_KEEPALIVE
 int is_valid(void) {
-    for (int row = 0; row < N; row++) {
-        for (int col = 0; col < N; col++) {
-            int val = grid[row][col];
-            if (val != UNASSIGNED) {
-                // Temporarily clear cell to check if value is valid
-                grid[row][col] = UNASSIGNED;
-                int valid = is_safe(grid, row, col, val);
-                grid[row][col] = val;
-                if (!valid) return 0;
-            }
-        }
-    }
-    return 1;
+    return validate_grid(grid);
 }
