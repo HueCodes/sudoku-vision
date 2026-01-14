@@ -35,3 +35,7 @@ cells/
 *_warped.jpg
 preprocessed.png
 warped.png
+
+# Private docs and prompts
+docs/
+ROADMAP.md
