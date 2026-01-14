@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# ML artifacts
+*.pt
+*.pth
+*.onnx
+data/mnist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+solver/obj/
+solver/sudoku_solver
+
+# Test outputs
+cells/
+*_warped.jpg
+preprocessed.png
+warped.png

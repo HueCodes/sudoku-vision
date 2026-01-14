@@ -149,23 +149,23 @@ Parameters: ~100K (small enough for mobile)
 **Goal:** Clean up existing code, add file I/O, prepare for integration
 
 Tasks:
-- [ ] Commit pending changes
-- [ ] Add puzzle validation (reject invalid inputs)
-- [ ] Add file I/O (read/write .sudoku files)
+- [x] Commit pending changes
+- [x] Add puzzle validation (reject invalid inputs)
+- [x] Add file I/O (read/write .sudoku files)
 - [ ] Add unit tests (validate solver correctness)
-- [ ] Create benchmark suite (time various puzzle difficulties)
-- [ ] Compile to WASM as proof of concept
+- [x] Create benchmark suite (time various puzzle difficulties)
+- [x] Compile to WASM as proof of concept
 
 ### Phase 1: Digit Recognition MVP
 **Goal:** Train a working digit classifier
 
 Tasks:
-- [ ] Set up Python ML environment (PyTorch, OpenCV)
-- [ ] Create training pipeline with MNIST
+- [x] Set up Python ML environment (PyTorch, OpenCV)
+- [x] Create training pipeline with MNIST (skeleton ready)
 - [ ] Build data augmentation pipeline
 - [ ] Train baseline CNN model
-- [ ] Export to ONNX/TFLite/TF.js
-- [ ] Create test harness with real sudoku images
+- [x] Export to ONNX/TFLite/TF.js (skeleton ready)
+- [x] Create test harness with real sudoku images (test images collected)
 - [ ] Measure accuracy, iterate on model
 
 Deliverable: Model achieving >95% accuracy on printed digits
@@ -174,12 +174,12 @@ Deliverable: Model achieving >95% accuracy on printed digits
 **Goal:** Extract cells from photos
 
 Tasks:
-- [ ] Implement preprocessing (grayscale, threshold, blur)
-- [ ] Implement contour detection for grid finding
-- [ ] Implement perspective correction
-- [ ] Implement cell extraction
+- [x] Implement preprocessing (grayscale, threshold, blur)
+- [x] Implement contour detection for grid finding
+- [x] Implement perspective correction
+- [x] Implement cell extraction
 - [ ] Handle edge cases (partial grids, tilted photos, poor lighting)
-- [ ] Create test suite with varied real-world images
+- [x] Create test suite with varied real-world images (5 sample images)
 
 Deliverable: Pipeline that extracts 81 cell images from a photo
 
