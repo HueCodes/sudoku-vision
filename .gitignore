@@ -30,6 +30,14 @@ Thumbs.db
 solver/obj/
 solver/sudoku_solver
 
+# iOS generated files (use xcodegen to regenerate from project.yml)
+*.xcodeproj/
+*.xcworkspace/
+
+# Duplicate mlpackage in ml/ (canonical copy is in ios/)
+ml/*.mlpackage/
+ml/*.onnx.data
+
 # Test outputs
 cells/
 *_warped.jpg
