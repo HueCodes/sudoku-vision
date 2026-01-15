@@ -61,11 +61,11 @@ struct PipelineResult: Sendable {
 /// Orchestrates the full detection and solving pipeline
 actor ScanPipeline {
 
-    private let gridDetector = GridDetector()
-    private let perspectiveCorrector = PerspectiveCorrector()
-    private let cellExtractor = CellExtractor()
-    private let digitClassifier = MockDigitClassifier()
-    private let solver = SudokuSolver()
+    private let gridDetector: GridDetector
+    private let perspectiveCorrector: PerspectiveCorrector
+    private let cellExtractor: CellExtractor
+    private let digitClassifier: any DigitClassifierProtocol
+    private let solver: SudokuSolver
 
     // Stability tracking
     private var lastRecognizedGrid: SudokuGrid?
@@ -75,6 +75,35 @@ actor ScanPipeline {
     // Configuration
     private let confidenceThreshold: Float = 0.7
     private let gridOutputSize = CGSize(width: 450, height: 450)
+
+    /// Initialize the pipeline with CoreML classifier.
+    /// Falls back to mock classifier if CoreML fails (e.g., on simulator).
+    init() {
+        self.gridDetector = GridDetector()
+        self.perspectiveCorrector = PerspectiveCorrector()
+        self.cellExtractor = CellExtractor()
+        self.solver = SudokuSolver()
+
+        // Try to initialize CoreML classifier
+        // Fall back to mock for simulator or if model is missing
+        do {
+            self.digitClassifier = try CoreMLDigitClassifier()
+            print("[ScanPipeline] Using CoreML digit classifier")
+        } catch {
+            print("[ScanPipeline] CoreML unavailable: \(error.localizedDescription)")
+            print("[ScanPipeline] Falling back to mock classifier")
+            self.digitClassifier = MockDigitClassifier()
+        }
+    }
+
+    /// Initialize with a specific classifier (for testing).
+    init(classifier: any DigitClassifierProtocol) {
+        self.gridDetector = GridDetector()
+        self.perspectiveCorrector = PerspectiveCorrector()
+        self.cellExtractor = CellExtractor()
+        self.solver = SudokuSolver()
+        self.digitClassifier = classifier
+    }
 
     /// Process a single camera frame through the full pipeline
     func processFrame(_ buffer: CVPixelBuffer) async -> Result<PipelineResult, PipelineError> {
