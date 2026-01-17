@@ -21,32 +21,36 @@ struct DetectedGrid: Equatable, Sendable {
 }
 
 /// Detects sudoku grids in camera frames using Vision.framework
-actor GridDetector {
+final class GridDetector: Sendable {
 
     /// Detect the largest square-like rectangle in the image
-    func detectGrid(in pixelBuffer: CVPixelBuffer) async -> DetectedGrid? {
+    func detectGrid(in pixelBuffer: CVPixelBuffer) -> DetectedGrid? {
         let request = VNDetectRectanglesRequest()
-        request.minimumAspectRatio = 0.8
-        request.maximumAspectRatio = 1.2
-        request.minimumSize = 0.3 // At least 30% of image
-        request.maximumObservations = 5
-        request.minimumConfidence = 0.5
+        request.minimumAspectRatio = 0.7  // More lenient
+        request.maximumAspectRatio = 1.4  // More lenient
+        request.minimumSize = 0.2 // At least 20% of image (was 30%)
+        request.maximumObservations = 10
+        request.minimumConfidence = 0.3  // Lower threshold (was 0.5)
 
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
 
         do {
             try handler.perform([request])
         } catch {
+            print("[GridDetector] Error: \(error)")
             return nil
         }
 
         guard let results = request.results, !results.isEmpty else {
+            // Uncomment for verbose debugging:
+            // print("[GridDetector] No rectangles found")
             return nil
         }
 
         // Find the largest rectangle that's closest to square
-        let best = results
-            .filter { isNearlySquare($0) }
+        let squareOnes = results.filter { isNearlySquare($0) }
+
+        let best = squareOnes
             .max { area(of: $0) < area(of: $1) }
 
         guard let observation = best else {

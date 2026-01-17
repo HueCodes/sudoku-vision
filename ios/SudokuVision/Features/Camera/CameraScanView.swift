@@ -83,6 +83,9 @@ struct CameraScanView: View {
             case .solved:
                 statusLabel(state.statusMessage, icon: state.statusIcon)
                     .foregroundStyle(.green)
+            case .gridDetected:
+                statusLabel(state.statusMessage, icon: state.statusIcon)
+                    .foregroundStyle(.blue)
             case .error:
                 statusLabel(state.statusMessage, icon: state.statusIcon)
                     .foregroundStyle(.red)

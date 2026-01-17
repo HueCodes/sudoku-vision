@@ -3,13 +3,15 @@ import Foundation
 
 /// Production digit classifier using CoreML inference.
 ///
-/// This classifier uses a CNN trained on MNIST to recognize digits 1-9 in sudoku cells.
-/// Empty cells are detected via pixel variance analysis before running inference.
+/// This classifier uses a CNN trained on synthetic + real printed digits to recognize
+/// digits 1-9 in sudoku cells. The model was trained with CLAHE + adaptive threshold
+/// preprocessing which is applied automatically before inference.
 ///
 /// ## Architecture
-/// - Input: 28x28 grayscale pixels, normalized [0,1], MNIST-style (white on black)
-/// - Output: 10-class logits (indices 0-9)
-/// - For sudoku, we only use predictions for classes 1-9 (digit 0 doesn't exist in sudoku)
+/// - Input: 28x28 grayscale pixels, preprocessed with CLAHE + adaptive threshold
+/// - Normalization: [-1, 1] (not [0, 1])
+/// - Output: 10-class logits (0=empty, 1-9=digits)
+/// - Class 0 represents empty cells in this model
 ///
 /// ## Usage
 /// ```swift
@@ -20,10 +22,10 @@ actor CoreMLDigitClassifier: DigitClassifierProtocol {
 
     // MARK: - Properties
 
-    /// The compiled CoreML model
+    /// The compiled CoreML model (DigitClassifier_v2)
     private let model: MLModel
 
-    /// Thresholds for empty cell detection
+    /// Thresholds for empty cell detection (pre-inference check)
     private let emptyMeanThreshold: Float = 0.12
     private let emptyVarianceThreshold: Float = 0.02
 
@@ -39,10 +41,16 @@ actor CoreMLDigitClassifier: DigitClassifierProtocol {
         let config = MLModelConfiguration()
         config.computeUnits = .all  // Use Neural Engine when available
 
-        // Load the Xcode-generated model class
-        // Xcode auto-generates "DigitClassifier" class from DigitClassifier.mlpackage
-        let digitClassifierModel = try DigitClassifier(configuration: config)
-        self.model = digitClassifierModel.model
+        // Load the v2 model trained on synthetic + real data with CLAHE preprocessing
+        // Try v2 first, fall back to v1 if not found
+        if let modelURL = Bundle.main.url(forResource: "DigitClassifier_v2", withExtension: "mlmodelc") {
+            self.model = try MLModel(contentsOf: modelURL, configuration: config)
+        } else if let modelURL = Bundle.main.url(forResource: "DigitClassifier", withExtension: "mlmodelc") {
+            self.model = try MLModel(contentsOf: modelURL, configuration: config)
+        } else {
+            throw NSError(domain: "CoreMLDigitClassifier", code: 1,
+                         userInfo: [NSLocalizedDescriptionKey: "Could not find DigitClassifier model in bundle"])
+        }
     }
 
     /// Initialize with a custom model (for testing).
@@ -79,15 +87,31 @@ actor CoreMLDigitClassifier: DigitClassifierProtocol {
     ///
     /// - Parameter cell: Extracted cell with 28x28 normalized pixels
     /// - Returns: Prediction with digit (0-9) and confidence
+    nonisolated(unsafe) private static var cellLogCount = 0
+
     func classifyCell(_ cell: ExtractedCell) async -> DigitPrediction {
-        // Step 1: Check if cell is empty using pixel analysis
-        // This is faster than running inference and more reliable for empty detection
-        if isEmptyCell(cell) {
-            return DigitPrediction(digit: 0, confidence: 0.95)
+        // Log raw cell stats for first few cells
+        Self.cellLogCount += 1
+        if Self.cellLogCount <= 3 {
+            let rawMean = cell.pixels.reduce(0, +) / Float(cell.pixels.count)
+            let rawMin = cell.pixels.min() ?? 0
+            let rawMax = cell.pixels.max() ?? 0
+            print("[Cell \(Self.cellLogCount)] Raw: mean=\(rawMean), min=\(rawMin), max=\(rawMax), count=\(cell.pixels.count)")
         }
 
-        // Step 2: Run CoreML inference for non-empty cells
-        return runInference(on: cell)
+        // Step 1: Apply CLAHE + adaptive threshold preprocessing
+        let preprocessedPixels = CellPreprocessor.preprocess(cell.pixels)
+
+        // Log preprocessed stats
+        if Self.cellLogCount <= 3 {
+            let prepMean = preprocessedPixels.reduce(0, +) / Float(preprocessedPixels.count)
+            let prepMin = preprocessedPixels.min() ?? 0
+            let prepMax = preprocessedPixels.max() ?? 0
+            print("[Cell \(Self.cellLogCount)] Prep: mean=\(prepMean), min=\(prepMin), max=\(prepMax)")
+        }
+
+        // Step 2: Run CoreML inference on preprocessed pixels
+        return runInference(on: preprocessedPixels)
     }
 
     // MARK: - Empty Cell Detection
@@ -116,14 +140,16 @@ actor CoreMLDigitClassifier: DigitClassifierProtocol {
 
     // MARK: - CoreML Inference
 
-    /// Run the CoreML model on a cell's pixel data.
+    /// Run the CoreML model on preprocessed pixel data.
     ///
-    /// - Parameter cell: Cell with 28x28 normalized pixels
+    /// - Parameter pixels: Preprocessed 28x28 pixels in [-1, 1] range
     /// - Returns: Digit prediction with confidence
-    private func runInference(on cell: ExtractedCell) -> DigitPrediction {
+    nonisolated(unsafe) private static var inferenceLogCount = 0
+
+    private func runInference(on pixels: [Float]) -> DigitPrediction {
         // Convert pixel array to MLMultiArray
-        guard let inputArray = createMLMultiArray(from: cell.pixels) else {
-            // Fallback to empty if conversion fails
+        guard let inputArray = createMLMultiArray(from: pixels) else {
+            print("[Classifier] Failed to create MLMultiArray")
             return DigitPrediction(digit: 0, confidence: 0.0)
         }
 
@@ -132,16 +158,42 @@ actor CoreMLDigitClassifier: DigitClassifierProtocol {
 
         // Run inference
         guard let output = try? model.prediction(from: inputFeatures) else {
+            print("[Classifier] Model prediction failed")
             return DigitPrediction(digit: 0, confidence: 0.0)
         }
 
-        // Extract logits from output
-        guard let logits = output.featureValue(for: "output")?.multiArrayValue else {
+        // Log output feature names once
+        Self.inferenceLogCount += 1
+        if Self.inferenceLogCount == 1 {
+            print("[Classifier] Output features: \(output.featureNames)")
+        }
+
+        // Extract logits from output - try different possible names
+        var logits: MLMultiArray?
+        for name in ["output", "var_143", "Identity", "logits"] {
+            if let arr = output.featureValue(for: name)?.multiArrayValue {
+                logits = arr
+                if Self.inferenceLogCount == 1 {
+                    print("[Classifier] Using output name: \(name)")
+                }
+                break
+            }
+        }
+
+        guard let logits = logits else {
+            print("[Classifier] Could not find output tensor")
             return DigitPrediction(digit: 0, confidence: 0.0)
         }
 
         // Convert logits to probabilities and find best prediction
-        return extractPrediction(from: logits)
+        let prediction = extractPrediction(from: logits)
+
+        // Log first few predictions
+        if Self.inferenceLogCount <= 5 {
+            print("[Classifier] Prediction: digit=\(prediction.digit), conf=\(prediction.confidence)")
+        }
+
+        return prediction
     }
 
     /// Create MLMultiArray from pixel data.
@@ -169,7 +221,7 @@ actor CoreMLDigitClassifier: DigitClassifierProtocol {
     /// Extract digit prediction from model output logits.
     ///
     /// Applies softmax to logits, then finds the highest probability class.
-    /// For sudoku, we prefer digits 1-9 since digit 0 doesn't exist.
+    /// The v2 model uses: class 0 = empty cell, classes 1-9 = digits.
     ///
     /// - Parameter logits: Raw model output [1, 10]
     /// - Returns: Best prediction with confidence
@@ -185,24 +237,24 @@ actor CoreMLDigitClassifier: DigitClassifierProtocol {
         // Apply softmax for probabilities
         let probabilities = softmax(logitValues)
 
-        // Find best prediction among digits 1-9 (sudoku doesn't use 0)
-        // We ignore class 0 since it represents the digit "0" in MNIST, not "empty"
-        var bestDigit = 1
-        var bestProb: Float = probabilities[1]
+        // Find best prediction among all classes (0-9)
+        // Class 0 = empty cell, classes 1-9 = digits
+        var bestClass = 0
+        var bestProb: Float = probabilities[0]
 
-        for digit in 2...9 {
-            if probabilities[digit] > bestProb {
-                bestDigit = digit
-                bestProb = probabilities[digit]
+        for classIdx in 1..<probabilities.count {
+            if probabilities[classIdx] > bestProb {
+                bestClass = classIdx
+                bestProb = probabilities[classIdx]
             }
         }
 
-        // If confidence is too low, return uncertain (digit 0)
+        // If confidence is too low, return uncertain empty (digit 0)
         if bestProb < minConfidenceThreshold {
             return DigitPrediction(digit: 0, confidence: bestProb)
         }
 
-        return DigitPrediction(digit: bestDigit, confidence: bestProb)
+        return DigitPrediction(digit: bestClass, confidence: bestProb)
     }
 
     /// Compute softmax probabilities from logits.

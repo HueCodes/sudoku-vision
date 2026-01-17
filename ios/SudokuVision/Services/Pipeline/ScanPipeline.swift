@@ -1,3 +1,4 @@
+import CoreImage
 import CoreVideo
 import Foundation
 
@@ -106,14 +107,19 @@ actor ScanPipeline {
     }
 
     /// Process a single camera frame through the full pipeline
-    func processFrame(_ buffer: CVPixelBuffer) async -> Result<PipelineResult, PipelineError> {
+    func processFrame(_ buffer: sending CVPixelBuffer) async -> Result<PipelineResult, PipelineError> {
         let startTime = CFAbsoluteTimeGetCurrent()
 
         // Step 1: Detect grid
-        guard let detectedGrid = await gridDetector.detectGrid(in: buffer) else {
+        guard let detectedGrid = gridDetector.detectGrid(in: buffer) else {
             resetStability()
+            // Log occasionally
+            if Int.random(in: 0..<20) == 0 {
+                print("[Pipeline] No grid detected")
+            }
             return .failure(.noGridDetected)
         }
+        print("[Pipeline] Grid found! conf=\(detectedGrid.confidence)")
 
         // Step 2: Perspective correction
         guard let warpedImage = perspectiveCorrector.correctPerspective(
@@ -121,6 +127,7 @@ actor ScanPipeline {
             corners: detectedGrid,
             outputSize: gridOutputSize
         ) else {
+            print("[Pipeline] Perspective correction failed")
             return .failure(.perspectiveCorrectionFailed)
         }
 
@@ -129,6 +136,7 @@ actor ScanPipeline {
         let extractedCells = cellExtractor.extractCells(from: preprocessed)
 
         guard extractedCells.cells.count == 81 else {
+            print("[Pipeline] Cell extraction failed - got \(extractedCells.cells.count)")
             return .failure(.cellExtractionFailed)
         }
 
@@ -138,8 +146,22 @@ actor ScanPipeline {
 
         // Step 5: Check stability (require consistent recognition)
         if !checkStability(recognizedPuzzle) {
+            // Only print occasionally
+            if stableFrameCount == 1 {
+                // Count non-empty cells
+                var filledCount = 0
+                for row in 0..<9 {
+                    for col in 0..<9 {
+                        if recognizedPuzzle[row, col] != 0 {
+                            filledCount += 1
+                        }
+                    }
+                }
+                print("[Pipeline] Stabilizing... conf=\(classification.averageConfidence), filled=\(filledCount)/81")
+            }
             return .failure(.noGridDetected) // Not stable yet
         }
+        print("[Pipeline] Stable! Solving...")
 
         // Step 6: Solve
         let solveResult = await solver.solve(recognizedPuzzle)

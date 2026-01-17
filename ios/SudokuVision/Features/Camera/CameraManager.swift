@@ -14,8 +14,9 @@ final class CameraManager: NSObject, ObservableObject {
     private let outputQueue = DispatchQueue(label: "camera.output")
 
     private var frameHandler: ((CVPixelBuffer) -> Void)?
-    private var frameSkipCount = 0
-    private var frameSkipInterval = 3 // Process every Nth frame
+    // nonisolated(unsafe) because these are only accessed from outputQueue
+    nonisolated(unsafe) private var frameSkipCount = 0
+    nonisolated(unsafe) private var frameSkipInterval = 3 // Process every Nth frame
 
     var previewLayer: AVCaptureVideoPreviewLayer {
         let layer = AVCaptureVideoPreviewLayer(session: captureSession)
@@ -90,7 +91,7 @@ final class CameraManager: NSObject, ObservableObject {
         captureSession.beginConfiguration()
         defer { captureSession.commitConfiguration() }
 
-        captureSession.sessionPreset = .hd1920x1080
+        captureSession.sessionPreset = .hd1280x720  // Lower resolution for better performance
 
         // Add video input
         guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
@@ -154,8 +155,9 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         // Call handler on main actor
-        Task { @MainActor in
-            self.frameHandler?(pixelBuffer)
+        nonisolated(unsafe) let unsafeBuffer = pixelBuffer
+        Task { @MainActor [weak self] in
+            self?.frameHandler?(unsafeBuffer)
         }
     }
 }

@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include "../include/sudoku.h"
+#include "sudoku.h"
 
 /* Internal solver with constraint propagation and MRV heuristic */
 static int solve_with_candidates(int grid[N][N], candidates_t cands[N][N])

@@ -27,8 +27,8 @@ actor SudokuSolver {
         // Call C solver
         let resultCode = storage.withUnsafeMutableBufferPointer { buffer -> Int32 in
             buffer.baseAddress!.withMemoryRebound(
-                to: CGrid.self,
-                capacity: 1
+                to: CRow.self,
+                capacity: 9
             ) { gridPtr in
                 solve_sudoku(gridPtr)
             }
@@ -62,8 +62,8 @@ actor SudokuSolver {
 
         return storage.withUnsafeMutableBufferPointer { buffer -> Bool in
             buffer.baseAddress!.withMemoryRebound(
-                to: CGrid.self,
-                capacity: 1
+                to: CRow.self,
+                capacity: 9
             ) { gridPtr in
                 validate_grid(gridPtr) != 0
             }
