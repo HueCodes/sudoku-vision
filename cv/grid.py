@@ -95,6 +95,7 @@ def warp_perspective(
     image: NDArray[np.uint8],
     corners: NDArray,
     output_size: int = 450,
+    inset_ratio: float = 0.0,
 ) -> NDArray[np.uint8]:
     """Warp grid region to square image.
 
@@ -102,11 +103,22 @@ def warp_perspective(
         image: Original image
         corners: 4 corner points of grid
         output_size: Size of output square image (pixels)
+        inset_ratio: Ratio to inset source corners (accounts for outer border)
 
     Returns:
         Warped square image of the grid
     """
     ordered = order_points(corners.astype(np.float32))
+
+    # Inset source corners to skip the outer border
+    # Calculate vectors from each corner toward center
+    center = ordered.mean(axis=0)
+    inset_corners = ordered.copy()
+    for i in range(4):
+        direction = center - ordered[i]
+        distance = np.linalg.norm(direction)
+        inset_amount = distance * inset_ratio
+        inset_corners[i] = ordered[i] + (direction / distance) * inset_amount
 
     dst = np.array([
         [0, 0],
@@ -115,7 +127,7 @@ def warp_perspective(
         [0, output_size - 1],
     ], dtype=np.float32)
 
-    matrix = cv2.getPerspectiveTransform(ordered, dst)
+    matrix = cv2.getPerspectiveTransform(inset_corners, dst)
     warped = cv2.warpPerspective(image, matrix, (output_size, output_size))
 
     return warped
