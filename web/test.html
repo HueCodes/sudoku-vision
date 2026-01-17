@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sudoku Vision - Test</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, monospace;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 { color: #00d4ff; }
+    .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+    .loading { background: #0f3460; }
+    .success { background: #064635; color: #38e54d; }
+    .error { background: #4a0000; color: #ff6b6b; }
+    #debug {
+      background: #16213e;
+      padding: 15px;
+      border-radius: 8px;
+      white-space: pre-wrap;
+      font-size: 13px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .grid-display {
+      font-family: monospace;
+      font-size: 16px;
+      line-height: 1.5;
+      background: #0f3460;
+      padding: 15px;
+      border-radius: 8px;
+      display: inline-block;
+    }
+    img { max-width: 300px; border-radius: 8px; }
+    .row { display: flex; gap: 20px; align-items: flex-start; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <h1>Sudoku Vision - Pipeline Test</h1>
+  <div id="status" class="status loading">Initializing...</div>
+
+  <div class="row">
+    <div>
+      <h3>Test Image</h3>
+      <img id="test-image" src="/test_sudoku.jpg" alt="Test sudoku">
+    </div>
+    <div>
+      <h3>Recognized Grid</h3>
+      <div id="recognized" class="grid-display">Loading...</div>
+    </div>
+    <div>
+      <h3>Solution</h3>
+      <div id="solution" class="grid-display">Loading...</div>
+    </div>
+  </div>
+
+  <h3>Debug Log</h3>
+  <div id="debug"></div>
+
+  <script src="/opencv.js"></script>
+  <script src="/sudoku.js"></script>
+  <script type="module">
+    import { detectGrid, warpPerspective, extractCells } from '/src/cv/index.ts';
+    import { DigitClassifier } from '/src/ml/index.ts';
+    import { solve, initSolver } from '/src/solver.ts';
+
+    const statusEl = document.getElementById('status');
+    const debugEl = document.getElementById('debug');
+    const recognizedEl = document.getElementById('recognized');
+    const solutionEl = document.getElementById('solution');
+    const testImage = document.getElementById('test-image');
+
+    function log(msg) {
+      console.log(msg);
+      debugEl.textContent += msg + '\n';
+      debugEl.scrollTop = debugEl.scrollHeight;
+    }
+
+    function setStatus(msg, type) {
+      statusEl.textContent = msg;
+      statusEl.className = 'status ' + type;
+    }
+
+    function formatGrid(grid) {
+      let s = '';
+      for (let row = 0; row < 9; row++) {
+        if (row > 0 && row % 3 === 0) s += '------+-------+------\n';
+        for (let col = 0; col < 9; col++) {
+          if (col > 0 && col % 3 === 0) s += '| ';
+          s += (grid[row][col] || '.') + ' ';
+        }
+        s += '\n';
+      }
+      return s;
+    }
+
+    async function waitForOpenCV() {
+      return new Promise((resolve) => {
+        const check = () => {
+          if (typeof cv !== 'undefined' && cv.Mat) {
+            resolve();
+          } else {
+            setTimeout(check, 100);
+          }
+        };
+        check();
+      });
+    }
+
+    async function runTest() {
+      try {
+        // Wait for OpenCV
+        log('Waiting for OpenCV...');
+        await waitForOpenCV();
+        log('OpenCV loaded');
+
+        // Load classifier
+        log('Loading digit classifier...');
+        const classifier = new DigitClassifier();
+        await classifier.load('/models/digit_cnn_v2.onnx');
+        log('Classifier loaded');
+
+        // Load solver
+        log('Loading solver...');
+        await initSolver();
+        log('Solver loaded');
+
+        // Wait for image to load
+        await new Promise((resolve) => {
+          if (testImage.complete) resolve();
+          else testImage.onload = resolve;
+        });
+
+        // Create canvas from image
+        log('Processing test image...');
+        const canvas = document.createElement('canvas');
+        canvas.width = testImage.naturalWidth;
+        canvas.height = testImage.naturalHeight;
+        log(`Image size: ${canvas.width}x${canvas.height}`);
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(testImage, 0, 0);
+
+        // Detect grid
+        log('Detecting grid...');
+        const startDetect = performance.now();
+        const gridResult = detectGrid(canvas);
+        log(`Grid detection: ${(performance.now() - startDetect).toFixed(1)}ms`);
+
+        if (!gridResult) {
+          throw new Error('No grid detected');
+        }
+        log(`Grid corners: ${JSON.stringify(gridResult.corners)}`);
+        log(`Confidence: ${(gridResult.confidence * 100).toFixed(1)}%`);
+
+        // Warp perspective
+        log('Warping perspective...');
+        const startWarp = performance.now();
+        const warpedCanvas = warpPerspective(canvas, gridResult.corners, 450);
+        log(`Warp: ${(performance.now() - startWarp).toFixed(1)}ms`);
+
+        // Extract cells
+        log('Extracting cells...');
+        const startExtract = performance.now();
+        const cells = extractCells(warpedCanvas, 28, 0.15);
+        log(`Extract: ${(performance.now() - startExtract).toFixed(1)}ms`);
+        log(`Cells: ${cells.length}, empty: ${cells.filter(c => c.isEmpty).length}`);
+
+        // Classify digits
+        log('Classifying digits...');
+        const startClassify = performance.now();
+        const predictions = await classifier.classifyCells(cells);
+        log(`Classify: ${(performance.now() - startClassify).toFixed(1)}ms`);
+
+        // Build grid
+        const grid = [];
+        for (let row = 0; row < 9; row++) {
+          grid[row] = [];
+          for (let col = 0; col < 9; col++) {
+            const idx = row * 9 + col;
+            grid[row][col] = predictions[idx].digit;
+          }
+        }
+
+        log('\nRecognized grid:');
+        log(formatGrid(grid));
+        recognizedEl.textContent = formatGrid(grid);
+
+        // Solve
+        log('Solving...');
+        const startSolve = performance.now();
+        const solution = await solve(grid);
+        log(`Solve: ${(performance.now() - startSolve).toFixed(1)}ms`);
+
+        if (!solution) {
+          throw new Error('No solution found - recognition may have errors');
+        }
+
+        log('\nSolution:');
+        log(formatGrid(solution));
+        solutionEl.textContent = formatGrid(solution);
+
+        setStatus('Test passed! Pipeline working correctly.', 'success');
+
+      } catch (error) {
+        log('ERROR: ' + error.message);
+        console.error(error);
+        setStatus('Test failed: ' + error.message, 'error');
+      }
+    }
+
+    runTest();
+  </script>
+</body>
+</html>

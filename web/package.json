@@ -1,0 +1,21 @@
+{
+  "name": "sudoku-vision-web",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "@techstark/opencv-js": "^4.10.0-release.1",
+    "onnxruntime-web": "^1.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "puppeteer": "^24.35.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}
