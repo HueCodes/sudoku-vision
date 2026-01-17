@@ -43,6 +43,17 @@ cells/
 *_warped.jpg
 preprocessed.png
 warped.png
+cv/debug_output/
+
+# Data (regenerate with ml/generate_synthetic.py)
+data/
+
+# Solver binaries
+solver/test_runner
+solver/test_runner.dSYM/
+
+# Web
+web/node_modules/
 
 # Private docs and prompts
 docs/
