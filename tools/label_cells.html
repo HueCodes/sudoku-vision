@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sudoku Cell Labeler</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #00d4ff; }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        .cell-display {
+            background: #16213e;
+            border: 3px solid #00d4ff;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        .cell-image {
+            width: 150px;
+            height: 150px;
+            image-rendering: pixelated;
+            background: #000;
+            border: 2px solid #444;
+        }
+        .info {
+            margin-top: 10px;
+            color: #888;
+            font-size: 14px;
+        }
+        .guess {
+            color: #ffd700;
+            font-size: 18px;
+            margin-top: 5px;
+        }
+        .instructions {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .instructions h2 { color: #00d4ff; margin-top: 0; }
+        .key {
+            display: inline-block;
+            background: #333;
+            padding: 5px 12px;
+            border-radius: 5px;
+            margin: 2px;
+            font-family: monospace;
+        }
+        .progress {
+            width: 100%;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 30px;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #00d4ff, #0099ff);
+            height: 100%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .stats {
+            display: flex;
+            gap: 30px;
+            margin-top: 10px;
+        }
+        .stat { text-align: center; }
+        .stat-value { font-size: 24px; color: #00d4ff; }
+        .stat-label { font-size: 12px; color: #888; }
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            background: #00d4ff;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover { background: #00a8cc; }
+        button:disabled { background: #555; color: #888; cursor: not-allowed; }
+        .save-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        .save-status.success { background: #00ff88; color: #000; }
+        .save-status.error { background: #ff4444; color: #fff; }
+    </style>
+</head>
+<body>
+    <h1>Sudoku Cell Labeler</h1>
+
+    <div class="instructions">
+        <h2>How to Label</h2>
+        <p>Press a number key to label each cell:</p>
+        <p>
+            <span class="key">0</span> Empty cell (no digit)<br>
+            <span class="key">1</span>-<span class="key">9</span> The digit shown
+        </p>
+        <p>Navigation:</p>
+        <p>
+            <span class="key">←</span> Previous cell &nbsp;
+            <span class="key">→</span> or <span class="key">Enter</span> Next cell &nbsp;
+            <span class="key">S</span> Save progress
+        </p>
+    </div>
+
+    <div class="container">
+        <div class="progress">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="labeled">0</div>
+                <div class="stat-label">Labeled</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="remaining">0</div>
+                <div class="stat-label">Remaining</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="current">1</div>
+                <div class="stat-label">Current</div>
+            </div>
+        </div>
+
+        <div class="cell-display">
+            <img id="cellImage" class="cell-image" src="" alt="Cell">
+            <div class="info">
+                <span id="cellPath"></span><br>
+                Source: <span id="sourceName"></span> | Position: (<span id="row"></span>, <span id="col"></span>)
+            </div>
+            <div class="guess">
+                System guess: <span id="guess"></span> | Your label: <span id="label">?</span>
+            </div>
+        </div>
+
+        <div class="nav-buttons">
+            <button onclick="prevCell()" id="prevBtn">← Previous</button>
+            <button onclick="nextCell()" id="nextBtn">Next →</button>
+            <button onclick="saveLabels()">Save Progress</button>
+            <button onclick="exportLabels()">Export Labels</button>
+        </div>
+    </div>
+
+    <div class="save-status" id="saveStatus"></div>
+
+    <script>
+        let cells = [];
+        let currentIndex = 0;
+        let labels = {};
+
+        // Load the to_label.json file
+        async function loadCells() {
+            try {
+                const response = await fetch('../data/raw/to_label.json');
+                const data = await response.json();
+                cells = data.cells_to_label;
+
+                // Load saved progress
+                const saved = localStorage.getItem('sudoku_labels');
+                if (saved) {
+                    labels = JSON.parse(saved);
+                }
+
+                // Find first unlabeled cell
+                currentIndex = cells.findIndex(c => labels[c.path] === undefined);
+                if (currentIndex === -1) currentIndex = 0;
+
+                updateDisplay();
+                updateStats();
+            } catch (e) {
+                alert('Error loading cells: ' + e.message + '\n\nMake sure to run this from a local server:\npython -m http.server 8000');
+            }
+        }
+
+        function updateDisplay() {
+            const cell = cells[currentIndex];
+            if (!cell) return;
+
+            // Fix path for serving from tools directory
+            document.getElementById('cellImage').src = '../' + cell.path;
+            document.getElementById('cellPath').textContent = cell.path.split('/').pop();
+            document.getElementById('sourceName').textContent = cell.source_image.split('/').pop();
+            document.getElementById('row').textContent = cell.row;
+            document.getElementById('col').textContent = cell.col;
+            document.getElementById('guess').textContent = cell.is_empty_guess ? 'Empty' : 'Has digit';
+
+            const label = labels[cell.path];
+            document.getElementById('label').textContent = label !== undefined ? label : '?';
+
+            document.getElementById('current').textContent = currentIndex + 1;
+            document.getElementById('prevBtn').disabled = currentIndex === 0;
+            document.getElementById('nextBtn').disabled = currentIndex === cells.length - 1;
+        }
+
+        function updateStats() {
+            const labeled = Object.keys(labels).length;
+            const total = cells.length;
+            const remaining = total - labeled;
+            const percent = Math.round((labeled / total) * 100);
+
+            document.getElementById('labeled').textContent = labeled;
+            document.getElementById('remaining').textContent = remaining;
+            document.getElementById('progressBar').style.width = percent + '%';
+            document.getElementById('progressBar').textContent = percent + '%';
+        }
+
+        function labelCell(digit) {
+            const cell = cells[currentIndex];
+            labels[cell.path] = digit;
+            localStorage.setItem('sudoku_labels', JSON.stringify(labels));
+            updateDisplay();
+            updateStats();
+
+            // Auto-advance to next unlabeled
+            setTimeout(() => {
+                if (currentIndex < cells.length - 1) {
+                    nextCell();
+                }
+            }, 100);
+        }
+
+        function nextCell() {
+            if (currentIndex < cells.length - 1) {
+                currentIndex++;
+                updateDisplay();
+            }
+        }
+
+        function prevCell() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateDisplay();
+            }
+        }
+
+        function showStatus(message, isError = false) {
+            const status = document.getElementById('saveStatus');
+            status.textContent = message;
+            status.className = 'save-status ' + (isError ? 'error' : 'success');
+            status.style.display = 'block';
+            setTimeout(() => { status.style.display = 'none'; }, 3000);
+        }
+
+        function saveLabels() {
+            localStorage.setItem('sudoku_labels', JSON.stringify(labels));
+            showStatus('Progress saved! (' + Object.keys(labels).length + ' labels)');
+        }
+
+        function exportLabels() {
+            // Create labeled cells data
+            const labeledCells = cells.map(cell => ({
+                ...cell,
+                label: labels[cell.path] !== undefined ? labels[cell.path] : null
+            }));
+
+            const output = {
+                created: new Date().toISOString(),
+                total_cells: cells.length,
+                labeled_cells: Object.keys(labels).length,
+                cells: labeledCells
+            };
+
+            // Download as JSON
+            const blob = new Blob([JSON.stringify(output, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'labeled_cells.json';
+            a.click();
+
+            showStatus('Exported ' + Object.keys(labels).length + ' labels!');
+        }
+
+        // Keyboard handling
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '0' && e.key <= '9') {
+                labelCell(parseInt(e.key));
+            } else if (e.key === 'ArrowLeft') {
+                prevCell();
+            } else if (e.key === 'ArrowRight' || e.key === 'Enter') {
+                nextCell();
+            } else if (e.key.toLowerCase() === 's') {
+                saveLabels();
+            }
+        });
+
+        // Start
+        loadCells();
+    </script>
+</body>
+</html>

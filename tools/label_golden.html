@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Label Golden Puzzle</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #ffd700; }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        .cell-display {
+            background: #16213e;
+            border: 3px solid #ffd700;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        .cell-image {
+            width: 200px;
+            height: 200px;
+            image-rendering: pixelated;
+            background: #000;
+            border: 2px solid #444;
+        }
+        .info {
+            margin-top: 10px;
+            color: #888;
+            font-size: 14px;
+        }
+        .position {
+            color: #ffd700;
+            font-size: 24px;
+            margin-top: 10px;
+        }
+        .label-display {
+            font-size: 32px;
+            margin-top: 10px;
+        }
+        .instructions {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .instructions h2 { color: #ffd700; margin-top: 0; }
+        .key {
+            display: inline-block;
+            background: #333;
+            padding: 5px 12px;
+            border-radius: 5px;
+            margin: 2px;
+            font-family: monospace;
+        }
+        .progress {
+            width: 100%;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 30px;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #ffd700, #ffaa00);
+            height: 100%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #000;
+        }
+        .grid-preview {
+            display: grid;
+            grid-template-columns: repeat(9, 30px);
+            gap: 1px;
+            background: #333;
+            padding: 2px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .grid-preview .cell {
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .grid-preview .cell.empty { background: #222; color: #555; }
+        .grid-preview .cell.labeled { background: #2a4a2a; color: #8f8; }
+        .grid-preview .cell.current { background: #ffd700; color: #000; }
+        .grid-preview .cell.unlabeled { background: #4a2a2a; color: #f88; }
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            background: #ffd700;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        button:hover { background: #ffaa00; }
+        button:disabled { background: #555; color: #888; cursor: not-allowed; }
+        .save-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        .save-status.success { background: #00ff88; color: #000; }
+        .expected {
+            background: #2a2a4a;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+        .expected h3 { color: #ffd700; margin-top: 0; }
+    </style>
+</head>
+<body>
+    <h1>Label Golden Puzzle Cells</h1>
+
+    <div class="instructions">
+        <h2>Instructions</h2>
+        <p>Label each cell from the golden puzzle. Press <span class="key">0</span>-<span class="key">9</span> for the digit (0 = empty).</p>
+        <p>Use <span class="key">←</span><span class="key">→</span> to navigate, <span class="key">S</span> to save.</p>
+    </div>
+
+    <div class="container">
+        <div class="progress">
+            <div class="progress-bar" id="progressBar">0/81</div>
+        </div>
+
+        <div class="cell-display">
+            <img id="cellImage" class="cell-image" src="" alt="Cell">
+            <div class="position">Row <span id="row">0</span>, Col <span id="col">0</span></div>
+            <div class="label-display">Your label: <span id="label" style="color: #ffd700">?</span></div>
+        </div>
+
+        <div class="grid-preview" id="gridPreview"></div>
+
+        <div class="nav-buttons">
+            <button onclick="prevCell()">← Previous</button>
+            <button onclick="nextCell()">Next →</button>
+            <button onclick="saveLabels()">Save Progress</button>
+            <button onclick="exportLabels()">Export Labels</button>
+        </div>
+    </div>
+
+    <div class="expected">
+        <h3>Expected Solution (for reference)</h3>
+        <pre>
+9 7 4 | 6 5 2 | 8 1 3
+8 3 5 | 4 9 1 | 2 7 6
+2 1 6 | 7 8 3 | 9 5 4
+------+-------+------
+3 6 1 | 2 7 4 | 5 9 8
+7 8 9 | 5 1 6 | 4 3 2
+5 4 2 | 8 3 9 | 7 6 1
+------+-------+------
+4 5 8 | 3 6 7 | 1 2 9
+6 9 7 | 1 2 8 | 3 4 5
+1 2 3 | 9 4 5 | 6 8 7
+        </pre>
+        <p style="color: #888; font-size: 12px;">Note: Some cells may be empty (given digits vs solution). Label what you SEE in each cell image.</p>
+    </div>
+
+    <div class="save-status" id="saveStatus"></div>
+
+    <script>
+        let cells = [];
+        let currentIndex = 0;
+        let labels = {};
+
+        async function loadCells() {
+            try {
+                const response = await fetch('../data/raw/to_label_golden.json');
+                const data = await response.json();
+                cells = data.cells;
+
+                const saved = localStorage.getItem('golden_labels');
+                if (saved) {
+                    labels = JSON.parse(saved);
+                }
+
+                currentIndex = cells.findIndex(c => labels[c.path] === undefined);
+                if (currentIndex === -1) currentIndex = 0;
+
+                updateDisplay();
+                updateGrid();
+            } catch (e) {
+                alert('Error: ' + e.message + '\n\nRun: python -m http.server 8080');
+            }
+        }
+
+        function updateDisplay() {
+            const cell = cells[currentIndex];
+            document.getElementById('cellImage').src = '../' + cell.path;
+            document.getElementById('row').textContent = cell.row;
+            document.getElementById('col').textContent = cell.col;
+
+            const label = labels[cell.path];
+            document.getElementById('label').textContent = label !== undefined ? (label === 0 ? 'empty' : label) : '?';
+
+            const labeled = Object.keys(labels).length;
+            document.getElementById('progressBar').style.width = (labeled / 81 * 100) + '%';
+            document.getElementById('progressBar').textContent = labeled + '/81';
+        }
+
+        function updateGrid() {
+            const grid = document.getElementById('gridPreview');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < 81; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+
+                const path = cells[i].path;
+                const label = labels[path];
+
+                if (i === currentIndex) {
+                    cell.classList.add('current');
+                    cell.textContent = label !== undefined ? (label === 0 ? '·' : label) : '?';
+                } else if (label !== undefined) {
+                    cell.classList.add('labeled');
+                    cell.textContent = label === 0 ? '·' : label;
+                } else {
+                    cell.classList.add('unlabeled');
+                    cell.textContent = '?';
+                }
+
+                cell.onclick = () => { currentIndex = i; updateDisplay(); updateGrid(); };
+                grid.appendChild(cell);
+            }
+        }
+
+        function labelCell(digit) {
+            const cell = cells[currentIndex];
+            labels[cell.path] = digit;
+            localStorage.setItem('golden_labels', JSON.stringify(labels));
+            updateDisplay();
+            updateGrid();
+            setTimeout(() => { if (currentIndex < 80) nextCell(); }, 100);
+        }
+
+        function nextCell() {
+            if (currentIndex < 80) { currentIndex++; updateDisplay(); updateGrid(); }
+        }
+
+        function prevCell() {
+            if (currentIndex > 0) { currentIndex--; updateDisplay(); updateGrid(); }
+        }
+
+        function showStatus(msg) {
+            const s = document.getElementById('saveStatus');
+            s.textContent = msg;
+            s.className = 'save-status success';
+            s.style.display = 'block';
+            setTimeout(() => s.style.display = 'none', 3000);
+        }
+
+        function saveLabels() {
+            localStorage.setItem('golden_labels', JSON.stringify(labels));
+            showStatus('Saved! (' + Object.keys(labels).length + '/81)');
+        }
+
+        function exportLabels() {
+            const output = {
+                created: new Date().toISOString(),
+                source: 'golden_puzzle',
+                total_cells: 81,
+                labeled_cells: Object.keys(labels).length,
+                cells: cells.map(c => ({ ...c, label: labels[c.path] ?? null }))
+            };
+
+            const blob = new Blob([JSON.stringify(output, null, 2)], {type: 'application/json'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'labeled_golden.json';
+            a.click();
+            showStatus('Exported!');
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '0' && e.key <= '9') labelCell(parseInt(e.key));
+            else if (e.key === 'ArrowLeft') prevCell();
+            else if (e.key === 'ArrowRight' || e.key === 'Enter') nextCell();
+            else if (e.key.toLowerCase() === 's') saveLabels();
+        });
+
+        loadCells();
+    </script>
+</body>
+</html>
